@@ -265,6 +265,7 @@ for channel in req_input:
 		file_path = f'./output/data/{channel}_messages.json'
 		obj = json.dumps(
 			data,
+			indent=4,
 			ensure_ascii=False,
 			separators=(',',':')
 		)
