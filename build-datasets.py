@@ -2,6 +2,7 @@
 
 # import modules
 import pandas as pd
+import argparse
 import json
 import glob
 import time
@@ -18,6 +19,32 @@ from utils import (
 	get_geo_attrs, timestamp_attrs
 )
 
+'''
+
+Arguments
+
+'''
+
+parser = argparse.ArgumentParser(description='Arguments.')
+parser.add_argument(
+	'--data-path',
+	'-d',
+	type=str,
+	required=False,
+	help='Path where data is located. Will use `./output/data` if not given.'
+)
+
+# Parse arguments
+args = vars(parser.parse_args())
+
+# get main path
+if args['data_path']:
+	main_path = args['data_path']
+	if main_path.endswith('/'):
+		main_path = main_path[:-1]
+else:
+	main_path = './output/data'
+
 # log results
 text = f'''
 Init program at {time.ctime()}
@@ -26,13 +53,14 @@ Init program at {time.ctime()}
 print (text)
 
 # Collect JSON files
-json_files_path = './output/data/*_messages.json'
+json_files_path = f'{main_path}/**/*_messages.json'
 json_files = glob.glob(
-	os.path.join(json_files_path)
+	os.path.join(json_files_path),
+	recursive=True
 )
 
 # Collected channels
-chats_file_path = './output/collected_chats.csv'
+chats_file_path = f'{main_path}/collected_chats.csv'
 data = pd.read_csv(chats_file_path, encoding='utf-8')
 
 # Init values
@@ -46,17 +74,9 @@ data['replies_received'] = 0
 
 # Process posts < init empty dataset >
 dataset_columns = msgs_dataset_columns()
-df = pd.DataFrame(
-	columns=dataset_columns
-)
 
 # Save dataset
-msgs_file_path = './output/msgs_dataset.csv'
-df.to_csv(
-	msgs_file_path,
-	index=False,
-	encoding='utf-8'
-)
+msgs_file_path = f'{main_path}/msgs_dataset.csv'
 
 # JSON files
 for f in json_files:
@@ -65,7 +85,9 @@ for f in json_files:
 	Iterate JSON files
 	'''
 	#  Get channel name
-	username = f.split('.json')[0].replace('\\', '/').split('/')[-1].replace('_messages', '')
+	username = f.split('.json')[0].replace('\\', '/').split('/')[-1].replace(
+		'_messages', ''
+	)
 
 	# Echo
 	print (f'Reading data from channel -> {username}')
@@ -159,7 +181,8 @@ for f in json_files:
 
 			# Signature and Message link
 			msg_id = item['id']
-			response['signature'] = f'msg_iteration.{idx}.user.{username}.post.{msg_id}'
+			response['signature'] = \
+				f'msg_iteration.{idx}.user.{username}.post.{msg_id}'
 			response['msg_link'] = f'https://t.me/{username}/{msg_id}'
 
 			# Check peer
@@ -167,7 +190,8 @@ for f in json_files:
 
 			# Reactions
 			response['views'] = item['views']
-			response['number_replies'] = item['replies']['replies'] if item['replies'] != None else 0
+			response['number_replies'] = \
+				item['replies']['replies'] if item['replies'] != None else 0
 			response['number_forwards'] = item['forwards']
 
 			# Forward attrs
@@ -194,44 +218,43 @@ for f in json_files:
 
 			# Media
 			response['contains_media'] = 1 if item['media'] != None else 0
-			response['media_type'] = None if item['media'] == None else item['media']['_']
+			response['media_type'] = None if item['media'] == None \
+				else item['media']['_']
 
 			# URLs
 			response = get_url_attrs(item['media'], response)
-			response['document_type'], response['video_duration_secs'] = get_document_attrs(item['media'], response)
+			response['document_type'], response['video_duration_secs'] = \
+				get_document_attrs(item['media'], response)
 
 			# Polls
-			response['poll_question'], response['poll_number_results'] = get_poll_attrs(item['media'], response)
+			response['poll_question'], response['poll_number_results'] = \
+				get_poll_attrs(item['media'], response)
 
 			# Contact
-			response['contact_phone_number'], response['contact_name'], response['contact_userid'] = get_contact_attrs(
-				item['media'],
-				response
-			)
+			response['contact_phone_number'], response['contact_name'], \
+				response['contact_userid'] = get_contact_attrs(
+					item['media'],
+					response
+				)
 
 			# Geo attrs
 			response = get_geo_attrs(item['media'], response)
 
+			# create dataframe
+			df = pd.json_normalize(response)
+			
+			# Update CSV file
+			df.to_csv(
+				msgs_file_path,
+				encoding='utf-8',
+				header=not os.path.isfile(msgs_file_path),
+				index=False,
+				mode='a'
+			)
 
 		except KeyError:
 			pass
-
-		tmp = df.append(response, ignore_index=True)
-
-		# Process date
-		tmp = timestamp_attrs(tmp)
-		tmp = tmp[df.columns.tolist()].copy()
-
-		# Update CSV file
-		tmp.to_csv(
-			msgs_file_path,
-			encoding='utf-8',
-			header=False,
-			index=False,
-			mode='a'
-
-		)
-
+		
 		# Update pbar
 		pbar.update(1)
 

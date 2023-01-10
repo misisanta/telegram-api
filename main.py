@@ -12,7 +12,7 @@ import os
 # import Telegram API submodules
 from api import *
 from utils import (
-	get_config_attrs, JSONEncoder, cmd_request_type,
+	get_config_attrs, JSONEncoder, create_dirs, cmd_request_type,
 	write_collected_chats
 )
 
@@ -27,19 +27,36 @@ parser.add_argument(
 	'--telegram-channel',
 	type=str,
 	required='--batch-file' not in sys.argv,
-	help='Specifies Telegram Channel to download data from.'
+	help='Specifies a Telegram Channel.'
 )
 parser.add_argument(
 	'--batch-file',
 	type=str,
 	required='--telegram-channel' not in sys.argv,
-	help='File containing Telegram Channels to download data from, one channel per line.'
+	help='File containing Telegram Channels, one channel per line.'
 )
 parser.add_argument(
 	'--limit-download-to-channel-metadata',
 	action='store_true',
 	help='Will collect channels metadata only, not posts data.'
 )
+
+'''
+
+Output
+'''
+parser.add_argument(
+	'--output',
+	'-o',
+	type=str,
+	required=False,
+	help='Folder to save collected data. Default: `./output/data`'
+)
+
+'''
+
+Updating data
+'''
 parser.add_argument(
 	'--min-id',
 	type=int,
@@ -107,10 +124,18 @@ if req_type == 'batch':
 else:
 	req_input = [req_input]
 
-# Create output folder
-output_folder = './output/data/'
-if not os.path.exists(output_folder):
-	os.makedirs(output_folder, exist_ok=True)
+# Reading | Creating an output folder
+if args['output']:
+	output_folder = args['output']
+	if output_folder.endswith('/'):
+		output_folder = output_folder[:-1]
+	else:
+		pass
+else:
+	output_folder = './output/data'
+
+# Create dirs
+create_dirs(output_folder)
 
 # iterate channels
 for channel in req_input:
@@ -156,7 +181,8 @@ for channel in req_input:
 
 	# save data
 	print ('> Writing channel data...')
-	file_path = f'./output/data/{channel}.json'
+	create_dirs(output_folder, subfolders=channel)
+	file_path = f'{output_folder}/{channel}/{channel}.json'
 	channel_obj = json.dumps(
 		full_channel_data,
 		ensure_ascii=False,
@@ -169,7 +195,7 @@ for channel in req_input:
 	print ('')
 
 	# collect chats
-	chats_path = './output/chats.txt'
+	chats_path = f'{output_folder}/chats.txt'
 	chats_file = open(chats_path, mode='a', encoding='utf-8')
 
 	# channel chats
@@ -179,7 +205,8 @@ for channel in req_input:
 		channel,
 		counter,
 		'channel_request',
-		client
+		client,
+		output_folder
 	)
 
 	if not args['limit_download_to_channel_metadata']:
@@ -239,7 +266,8 @@ for channel in req_input:
 					channel,
 					counter,
 					'from_messages',
-					client
+					client,
+					output_folder
 				)
 
 				# Adding unique users objects
@@ -262,10 +290,9 @@ for channel in req_input:
 
 		# save data
 		print ('> Writing posts data...')
-		file_path = f'./output/data/{channel}_messages.json'
+		file_path = f'{output_folder}/{channel}/{channel}_messages.json'
 		obj = json.dumps(
 			data,
-			indent=4,
 			ensure_ascii=False,
 			separators=(',',':')
 		)
@@ -317,22 +344,21 @@ counter_df = pd.DataFrame.from_dict(
 
 # save counter
 counter_df.to_csv(
-	'./output/counter.csv',
+	f'{output_folder}/counter.csv',
 	encoding='utf-8',
 	index=False
 )
 
-
 # merge dataframe
 df = pd.read_csv(
-	'./output/collected_chats.csv',
+	f'{output_folder}/collected_chats.csv',
 	encoding='utf-8'
 )
 
 del counter_df['username']
 df = df.merge(counter_df, how='left', on='id')
 df.to_csv(
-	'./output/collected_chats.csv',
+	f'{output_folder}/collected_chats.csv',
 	index=False,
 	encoding='utf-8'
 )

@@ -51,6 +51,16 @@ class JSONEncoder(json.JSONEncoder):
 
 		return json.JSONEncoder.default(self, o)
 
+# Create new folders
+def create_dirs(root, subfolders=None):
+	'''
+	'''
+	root = root if subfolders == None else f'{root}/{subfolders}/'
+	if not os.path.exists(root):
+		os.makedirs(f'{root}', exist_ok=True)
+	
+	return
+
 # Get user-console request
 def cmd_request_type(args):
 	'''
@@ -84,7 +94,8 @@ def write_collected_chats(
 		source,
 		counter,
 		req_type,
-		client
+		client,
+		output_folder
 	):
 	'''
 
@@ -94,6 +105,7 @@ def write_collected_chats(
 	counter -> dict object to count mentioned channels
 	req_type -> request type (channel request or from messages)
 	client -> Telegram API client
+	output_folder -> Folder to save collected data
 
 	'''
 	metadata = []
@@ -136,11 +148,13 @@ def write_collected_chats(
 					
 						for ch in collected_chats:
 							if ch['id'] == channel_request['full_chat']['id']:
-								ch['participants_count'] = channel_request['full_chat']['participants_count']
+								ch['participants_count'] = \
+									channel_request['full_chat']['participants_count']
 							else:
 								ch_id = ch['id']
 								try:
-									ch['participants_count'] = process_participants_count(client, ch_id)
+									ch['participants_count'] = \
+										process_participants_count(client, ch_id)
 								except TypeError:
 									ch['participants_count'] = 0
 
@@ -172,15 +186,19 @@ def write_collected_chats(
 							]
 						)
 					except ValueError:
-						print ('> Exception - ValueError')
-						print (f'> ID - {id_}')
-						print ('')
+						'''
+						Save exceptions to new file
+						'''
+						exceptions_path = f'{output_folder}/user_exceptions.txt'
+						w = open(exceptions_path, encoding='utf-8', mode='a')
+						w.write(f'ID - {id_}\n')
+						w.close()
 
 		except KeyError:
 			pass
 
 	df = pd.DataFrame(metadata)
-	csv_path = './output/collected_chats.csv'
+	csv_path = f'{output_folder}/collected_chats.csv'
 	df.to_csv(
 		csv_path,
 		encoding='utf-8',
@@ -514,3 +532,20 @@ def msgs_dataset_columns():
 		'geo_shared_address'
 	]
 
+
+'''
+
+Network
+'''
+def normalize_values(data):
+	'''
+
+	data: a list of tuples -> based on G.degree
+	'''
+	max_v = max([v for i, v in data])
+	min_v = min([v for i, v in data])
+
+	return [
+		int((i - (min_v)) / (max_v - min_v) * 450) + 50
+		for l, i in data 
+	]
